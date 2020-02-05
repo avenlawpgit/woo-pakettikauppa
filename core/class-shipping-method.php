@@ -624,17 +624,18 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
               $taxes[ $key ] = 0.0;
             }
 
-            $taxes[ $key ] += round($cost_item - $cost_item / (1 + $value['rate'] / 100.0), 2);
+            $taxes[ $key ] += round($cost_item - $cost_item / (1 + $value['rate'] / 100.0), wc_get_price_decimals() + 1);
           }
         }
       }
 
-      foreach ( $taxes as $_tax ) {
+      foreach ( $taxes as $k => $_tax ) {
         $taxes_total += $_tax;
+        $taxes[$k] = round( $_tax, wc_get_price_decimals() );
       }
 
       return array(
-        'total' => $taxes_total,
+        'total' => round( $taxes_total, wc_get_price_decimals() ),
         'taxes' => $taxes,
       );
     }
