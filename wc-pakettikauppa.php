@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: WooCommerce Pakettikauppa
- * Version: 2.2.1
+ * Version: 2.2.2
  * Plugin URI: https://github.com/Seravo/woo-pakettikauppa
  * Description: Modification of the Pakettikauppa shipping service for WooCommerce. Integrates Posti, Smartship, Matkahuolto, DB Schenker and others. Version 2 breaks 1.x pricing settings.
  * Author: Avenla,Seravo

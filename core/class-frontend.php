@@ -262,7 +262,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Frontend') ) {
       // Compatibility fixes below
       // Klarna Checkout changes the checkout flow; user types their address into an iframe instead
       // and selecting a pickup point is not possible
-      if ( $show_pickup_point_override_query === 'yes' || $is_klarna ) {
+      if ( $show_pickup_point_override_query === 'yes' ) {
         $title = $is_klarna ? $this->core->text->pickup_point_title() : $this->core->text->custom_pickup_point_title();
 
         echo '<tr class="shipping-custom-pickup-point">';
@@ -376,7 +376,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Frontend') ) {
                 'onchange' => 'pakettikauppa_pickup_point_change(this)',
                 'data-private-points' => join(';', array_keys($private_points)),
               ),
-              'options'           => $all_points,
+              'options'           => $all_points
             ),
             null
           );

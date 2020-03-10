@@ -102,6 +102,13 @@ You can use plugin (f.ex. Polylang) to translate shipping method names.
 4. Setup wizard
 
 == Changelog ==
+
+= 2.2.2 =
+* Fix compatibility with klarna-checkout-for-woocommerce plugin v2.x
+
+= 2.2.1 =
+* Fix VAT calculation for shipping
+
 = 2.2.0 =
 * Properly catch exceptions so faulty orders don't cause a fatal error
 * Allow supplying a different address for pickup point search
