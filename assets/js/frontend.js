@@ -46,30 +46,36 @@ function pakettikauppa_custom_pickup_point_change(element) {
   });
 }
 
-
 /**
- * Upon shipping method change page must reload to trigger Klarna plugins moveExtraCheckoutFields()
- * @since klarna-checkout-for-woocommerce version 2.0.0
+ * KCO compatibility.
+ * Do only when customer is on KCO page (to prevent disturbance on regular checkout)
  */
-jQuery('body').on('updated_shipping_method kco_shipping_address_changed', function(){
-  window.location.reload();
+if (typeof window._klarnaCheckout === 'function') {
   
-  //TODO: How to prevent two selects with same name?
-  // (After Klarna move the cart is reloaded, and the select field appears again)
-});
-
-/**
- * Woocommerce frontend validation doesn't validate the pickup point selection because it's loaded after document.ready,
- * and select2 isn't properly initialised on it.
- * If server-side validation fails, the iframe and cart remain blocked/suspended, and it must be manually released.
- */
-jQuery('body').on('kco_order_validation', function( event, result ){
-  if( false === result ){
-    jQuery(this).trigger('updated_checkout');
-    
-    // Highlight the failed field. (use name as selector, because there are two selects with the same ID atm)
-    jQuery('select[name="pakettikauppa_pickup_point"]').css({color: 'red', fontWeight: 'bold' }).on('click', function(){
-      jQuery(this).css({color: 'initial', fontWeight: 'unset'});
-    });
-  }
-});
+  /**
+   * Upon shipping method change page must reload to trigger Klarna plugins moveExtraCheckoutFields()
+   * @since klarna-checkout-for-woocommerce version 2.0.0
+   */
+  jQuery('body').on('updated_shipping_method kco_shipping_address_changed', function () {
+    window.location.reload();
+    //TODO: How to prevent two selects with same name?
+    // (After Klarna move the cart is reloaded, and the select field appears again)
+  });
+  
+  /**
+   * Woocommerce frontend validation doesn't validate the pickup point selection because it's loaded after document.ready,
+   * and select2 isn't properly initialised on it.
+   * If server-side validation fails, the iframe and cart remain blocked/suspended, and it must be manually released.
+   */
+  jQuery('body').on('kco_order_validation', function (event, result) {
+    if (false === result) {
+      jQuery(this).trigger('updated_checkout');
+      
+      // Highlight the failed field. (use name as selector, because there are two selects with the same ID atm)
+      jQuery('select[name="pakettikauppa_pickup_point"]').css({color: 'red', fontWeight: 'bold'}).on('click', function () {
+        jQuery(this).css({color: 'initial', fontWeight: 'unset'});
+      });
+    }
+  });
+  
+}

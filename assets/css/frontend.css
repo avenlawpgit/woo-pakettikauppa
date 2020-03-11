@@ -2,6 +2,6 @@
 * Add frontend style to this file.
 */
 
-.woocommerce-checkout-review-order-table tr.shipping-pickup-point {
+#kco-order-review .woocommerce-checkout-review-order-table tr.shipping-pickup-point {
 	display: none;
 }
