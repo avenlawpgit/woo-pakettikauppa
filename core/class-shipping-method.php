@@ -2,6 +2,8 @@
 namespace Woo_Pakettikauppa_Core;
 
 // Prevent direct access to the script
+use WC_Countries;
+
 if ( ! defined('ABSPATH') ) {
   exit;
 }
@@ -151,7 +153,8 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
       }
 
       $all_shipping_methods = $this->get_core()->shipment->services();
-      $additional_services = array();
+
+      $methods = $this->get_core()->shipment->get_pickup_point_methods();
 
       ob_start();
     ?>
@@ -199,7 +202,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
                 if ( ! empty($values[ $method_id ]['service']) ) {
                   $selected_service = $values[ $method_id ]['service'];
                 }
-                if ( empty($selected_service) ) {
+                if ( empty($selected_service) && ! empty($methods) ) {
                   $selected_service = '__PICKUPPOINTS__';
                 }
                 ?>
@@ -208,7 +211,9 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
               <td style="vertical-align: top;">
                 <select id="<?php echo $method_id; ?>-select" name="<?php echo esc_html($field_key) . '[' . esc_attr($method_id) . '][service]'; ?>" onchange="pkChangeOptions(this, '<?php echo $method_id; ?>');">
                   <option value="__NULL__"><?php $this->get_core()->text->no_shipping(); ?></option>
-                  <option value="__PICKUPPOINTS__" <?php echo ($selected_service === '__PICKUPPOINTS__' ? 'selected' : ''); ?>>Noutopisteet</option>
+                  <?php if ( ! empty($methods) ) : ?>
+                    <option value="__PICKUPPOINTS__" <?php echo ($selected_service === '__PICKUPPOINTS__' ? 'selected' : ''); ?>>Noutopisteet</option>
+                  <?php endif; ?>
                   <?php foreach ( $all_shipping_methods as $service_id => $service_name ) : ?>
                     <option value="<?php echo $service_id; ?>" <?php echo (strval($selected_service) === strval($service_id) ? 'selected' : ''); ?>>
                       <?php echo $service_name; ?>
@@ -221,9 +226,6 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
               </td>
               <td style="vertical-align: top;">
                 <div style='display: none;' id="pickuppoints-<?php echo $method_id; ?>">
-                  <?php
-                  $methods = $this->get_core()->shipment->get_pickup_point_methods();
-                  ?>
                   <?php foreach ( $methods as $method_code => $method_name ) : ?>
                     <input type="hidden"
                             name="<?php echo esc_html($field_key) . '[' . esc_attr($method_id) . '][' . $method_code . '][active]'; ?>"
@@ -241,7 +243,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
                 <?php foreach ( $all_additional_services as $method_code => $additional_services ) : ?>
                   <div class="pk-services-<?php echo $method_id; ?>" style='display: none;' id="services-<?php echo $method_id; ?>-<?php echo $method_code; ?>">
                     <?php foreach ( $additional_services as $additional_service ) : ?>
-                      <?php if ( empty($additional_service->specifiers) || in_array($additional_service->service_code, array( '3102' )) ) : ?>
+                      <?php if ( empty($additional_service->specifiers) || in_array($additional_service->service_code, array( '3102' ), true) ) : ?>
                         <input type="hidden"
                                 name="<?php echo esc_html($field_key) . '[' . esc_attr($method_id) . '][' . esc_attr($method_code) . '][additional_services][' . $additional_service->service_code . ']'; ?>"
                                 value="no">
@@ -407,17 +409,23 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
       return $fields;
     }
 
-    private function my_global_form_fields() {
+    protected function get_form_field_mode() {
       return array(
-        'mode'                       => array(
-          'title'   => $this->get_core()->text->mode(),
-          'type'    => 'select',
-          'default' => 'test',
-          'options' => array(
-            'test'       => $this->get_core()->text->testing_environment(),
-            'production' => $this->get_core()->text->production_environment(),
-          ),
+        'title'   => $this->get_core()->text->mode(),
+        'type'    => 'select',
+        'default' => 'test',
+        'options' => array(
+          'test'       => $this->get_core()->text->testing_environment(),
+          'production' => $this->get_core()->text->production_environment(),
         ),
+      );
+    }
+
+    private function my_global_form_fields() {
+      $wc_countries = new WC_Countries();
+
+      return array(
+        'mode'                       => $this->get_form_field_mode(),
 
         'account_number'             => array(
           'title'    => $this->get_core()->text->api_key_title(),
@@ -451,7 +459,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
         'add_tracking_to_email'      => array(
           'title'   => $this->get_core()->text->add_tracking_link_to_email(),
           'type'    => 'checkbox',
-          'default' => 'no',
+          'default' => 'yes',
         ),
 
         'add_pickup_point_to_email'      => array(
@@ -545,6 +553,24 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
           'type'    => 'text',
           'default' => WC()->countries->get_base_city(),
         ),
+
+        'sender_country'                => array(
+          'title'   => $this->get_core()->text->sender_country(),
+          'type'    => 'select',
+          'default' => WC()->countries->get_base_country(),
+          'options'   => $wc_countries->get_countries(),
+        ),
+
+        'sender_phone'                => array(
+          'title'   => $this->get_core()->text->sender_phone(),
+          'type'    => 'text',
+        ),
+
+        'sender_email'                => array(
+          'title'   => $this->get_core()->text->sender_email(),
+          'type'    => 'email',
+        ),
+
         'info_code'                  => array(
           'title'   => $this->get_core()->text->info_code(),
           'type'    => 'text',
@@ -718,7 +744,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
 
             $this->add_rate(
               array(
-                'meta_data' => [ 'service_code' => $service_code ],
+                'meta_data' => array( 'service_code' => $service_code ),
                 'label'     => $service_title,
                 'cost'      => (string) 0,
                 'package'   => $package,
@@ -771,7 +797,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
 
       $this->add_rate(
         array(
-          'meta_data' => [ 'service_code' => $service_code ],
+          'meta_data' => array( 'service_code' => $service_code ),
           'label'     => $service_title,
           'cost'      => (string) $shipping_cost,
           'taxes'     => $taxes['taxes'],

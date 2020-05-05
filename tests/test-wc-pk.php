@@ -32,10 +32,10 @@ class Test_Frontend extends WP_UnitTestCase {
    */
   public function test_wc_pakettikauppa_get_status_text( $frontend ) {
 
-    $status = call_user_func([ $frontend->core->shipment, 'get_status_text' ], 13);
+    $status = call_user_func(array( $frontend->core->shipment, 'get_status_text' ), 13);
     $this->assertEquals('Item is collected from sender - picked up', $status);
     $input  = 'abcdefg';
-    $status = call_user_func([ $frontend->core->shipment, 'get_status_text' ], $input);
+    $status = call_user_func(array( $frontend->core->shipment, 'get_status_text' ), $input);
     $this->assertEquals('Unknown status: ' . $input, $status);
   }
 
@@ -47,7 +47,7 @@ class Test_Frontend extends WP_UnitTestCase {
       0 => 90080,
       1 => 'seurantakoodi',
     );
-    $output = call_user_func([ $frontend->core->shipment, 'tracking_url' ], $inputs[1]);
+    $output = call_user_func(array( $frontend->core->shipment, 'tracking_url' ), $inputs[1]);
     $this->assertEquals('https://www.pakettikauppa.fi/seuranta/?seurantakoodi', $output);
   }
 
@@ -55,9 +55,9 @@ class Test_Frontend extends WP_UnitTestCase {
    * @depends test_init
    */
   public function test_get_pickup_points( $frontend ) {
-    $pickups = call_user_func([ $frontend->core->shipment, 'get_pickup_points' ], 00100);
-    $wc_pakettikauppa_client = new Pakettikauppa\Client(array( 'test_mode' => true ));
-    $pickup_point_data       = $wc_pakettikauppa_client->searchPickupPoints(00100);
+    $pickups = $frontend->core->shipment->get_pickup_points('00180', 'Abrahaminkatu 5', 'FI', '2103');
+    $wc_pakettikauppa_client = new Pakettikauppa\Client();
+    $pickup_point_data       = $wc_pakettikauppa_client->searchPickupPoints('00180', 'Abrahaminkatu 5', 'FI', '2103');
     $this->assertEquals($pickup_point_data, $pickups);
   }
 }

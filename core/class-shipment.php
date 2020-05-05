@@ -286,6 +286,37 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
       return $tracking_code;
     }
 
+    private function post_label_to_url( $url, $tracking_code ) {
+      $contents = $this->shipment->fetch_shipping_label($tracking_code);
+
+      $label = base64_decode( $contents->{'response.file'} ); // @codingStandardsIgnoreLine
+
+      $postdata = http_build_query(array( 'label' => $label ));
+
+      $opts = array(
+        'http' => array(
+          'method'  => 'POST',
+          'header'  => 'Content-Type: application/x-www-form-urlencoded',
+          'content' => $postdata,
+        ),
+        'ssl' => array(
+          'verify_peer' => false,
+          'verify_peer_name' => false,
+          'allow_self_signed'=> true,
+        ),
+      );
+
+      $context  = stream_context_create($opts);
+
+      $result = file_get_contents($url, false, $context);
+
+      if ( $result === false ) {
+        return false;
+      }
+
+      return $result;
+    }
+
     public function get_service_id_from_order( \WC_Order $order, $return_default_shipping_method = true ) {
       if ( $order === null ) {
         return null;
@@ -339,6 +370,19 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
         $service_id = self::get_default_service();
       }
 
+      if ( $service_id === '__PICKUPPOINTS__' ) {
+          // This might be a bug or a version update problem
+          $pickup_point = get_post_meta($order->get_id(), '_' . str_replace('wc_', '', $this->core->prefix) . '_pickup_point', true);
+
+          $provider = explode(':', $pickup_point, 2);
+
+          if ( ! empty($provider) ) {
+              $methods = array_flip($this->core->shipment->get_pickup_point_methods());
+              $service_id = $methods[$provider[0]];
+          } else {
+              $service_id = null;
+          }
+      }
       return $service_id;
     }
 
@@ -399,20 +443,47 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
 
       $account_number = isset($settings['account_number']) ? $settings['account_number'] : '';
       $secret_key     = isset($settings['secret_key']) ? $settings['secret_key'] : '';
-      $mode           = isset($settings['mode']) ? $settings['mode'] : '';
-      $is_test_mode   = ($mode === 'production' ? false : true);
+      $mode           = isset($settings['mode']) ? $settings['mode'] : 'test';
 
-      $options_array = array_merge(
+      if ( empty($this->config[$mode]) ) {
+          $this->config[$mode] = array();
+      }
+
+      $configs = $this->core->api_config;
+
+      $configs[$mode] = array_merge(
         array(
           'api_key'   => $account_number,
           'secret'    => $secret_key,
-          'test_mode' => $is_test_mode,
+          'use_posti_auth' => false,
         ),
-        $this->core->api_config
+        $this->core->api_config[$mode]
       );
 
-      $this->client = new \Pakettikauppa\Client($options_array);
+      $this->client = new \Pakettikauppa\Client($configs, $mode);
       $this->client->setComment($this->core->api_comment);
+
+      if ( $configs[$mode]['use_posti_auth'] ) {
+        $transient_name = $this->core->prefix . '_access_token';
+
+        $token = get_transient($transient_name);
+
+        /**
+         * TODO locking
+         *
+         * in case there are multiple simultanous requests to this part of the code, it will create multiple
+         * getToken() requests to the authentication server. So this needs to be eather distributedly locked or
+         * moved to a background process and run from the cron
+         */
+        if ( empty($token) ) {
+          $token = $this->client->getToken();
+
+          // let's remove 100 seconds from expires_in time so in case of a network lag, requests will still be valid on server side
+          set_transient($transient_name, $token, $token->expires_in - 100);
+        }
+
+        $this->client->setAccessToken($token->access_token);
+      }
     }
 
     /**
@@ -426,9 +497,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
       $tracking_code = get_post_meta($post_id, '_' . $this->core->prefix . '_tracking_code', true);
 
       if ( ! empty($tracking_code) ) {
-        $result = $this->client->getShipmentStatus($tracking_code);
-
-        $data = json_decode($result);
+        $data = $this->client->getShipmentStatus($tracking_code);
 
         if ( ! empty($data) && isset($data[0]) ) {
           return $data[0]->{'status_code'};
@@ -454,12 +523,18 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
 
       $shipment->setShippingMethod($service_id);
 
+      $id = $order->get_id();
+      $shipping_phone = get_post_meta($id, '_shipping_phone', true);
+      $shipping_email = get_post_meta($id, '_shipping_email', true);
+
       $sender = new Sender();
       $sender->setName1($this->settings['sender_name']);
       $sender->setAddr1($this->settings['sender_address']);
       $sender->setPostcode($this->settings['sender_postal_code']);
       $sender->setCity($this->settings['sender_city']);
-      $sender->setCountry('FI');
+      $sender->setPhone($this->settings['sender_phone']);
+      // $sender->setEmail($this->settings['sender_email']);
+      $sender->setCountry((empty($this->settings['sender_country']) ? 'FI' : $this->settings['sender_country']));
       $shipment->setSender($sender);
 
       $receiver = new Receiver();
@@ -469,8 +544,8 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
       $receiver->setPostcode($order->get_shipping_postcode());
       $receiver->setCity($order->get_shipping_city());
       $receiver->setCountry(($order->get_shipping_country() === null ? 'FI' : $order->get_shipping_country()));
-      $receiver->setEmail($order->get_billing_email());
-      $receiver->setPhone($order->get_billing_phone());
+      $receiver->setEmail(! empty($shipping_email) ? $shipping_email : $order->get_billing_email());
+      $receiver->setPhone(! empty($shipping_phone) ? $shipping_phone : $order->get_billing_phone());
       $shipment->setReceiver($receiver);
 
       $info = new Info();
@@ -724,7 +799,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
 
       // This makes zero sense unless you read this issue:
       // https://github.com/Pakettikauppa/api-library/issues/11
-      if ( $pickup_point_data === '[]' ) {
+      if ( empty($pickup_point_data) ) {
         throw new \Exception($this->core->text->no_pickup_points_error());
       }
 
@@ -746,7 +821,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
 
       // This makes zero sense unless you read this issue:
       // https://github.com/Pakettikauppa/api-library/issues/11
-      if ( $pickup_point_data === '[]' ) {
+      if ( empty($pickup_point_data) ) {
         throw new \Exception($this->core->text->no_pickup_points_error());
       }
 
@@ -884,7 +959,11 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
       $all_shipping_methods = get_transient($transient_name);
 
       if ( empty($all_shipping_methods) ) {
-        $all_shipping_methods = json_decode($this->client->listShippingMethods());
+        try {
+          $all_shipping_methods = $this->client->listShippingMethods();
+        } catch ( \Exception $ex ) {
+          $all_shipping_methods = null;
+        }
 
         if ( ! empty($all_shipping_methods) ) {
           set_transient($transient_name, $all_shipping_methods, $transient_time);

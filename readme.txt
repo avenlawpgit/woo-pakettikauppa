@@ -3,7 +3,7 @@ Contributors: joosev, ottok, leotoikka, serter, k1sul1
 Donate link: https://seravo.com/
 Tags: woocommerce, shipping, toimitustavat, smartship, pakettikauppa, posti, smartpost, prinetti, matkahuolto, schenker, seravo, gls
 Requires at least: 4.6
-Tested up to: 5.3
+Tested up to: 5.4
 Requires PHP: 7.1
 Stable tag: trunk
 License: GPLv3 or later
@@ -15,7 +15,7 @@ This plugin enables WooCommerce orders to ship using pretty much any shipping me
 
 [Pakettikauppa](https://www.pakettikauppa.fi/) is a shipping service provider in Finland. This plugin integrates their service into WooCommerce. To start shipping, all your WooCommerce needs is this plugin and a API credentials of your account registered with Pakettikauppa.
 
-> *Note!* If you already have shipping contracts with Posti, Matkahuolto, DB Schenker, Asendia or GLS with reduced prices, you can contact the customer support of Pakettikauppa to get those contracts via Pakettikauppa so you can use the WooCommerce Pakettikauppa plugin with your current shipping contracts. Usage of own contracts is free of charge. No need to use logistics services own integrations (e.g. Posti SmartShip / Prinetti )
+> *Note!* If you already have shipping contracts with Posti, Matkahuolto, DB Schenker, Asendia or GLS with reduced prices, you can contact the customer support of Pakettikauppa to get those contracts via Pakettikauppa so you can use the WooCommerce Pakettikauppa plugin with your current shipping contracts. No need to use logistics services own integrations (e.g. Posti SmartShip / Prinetti )
 
 This plugin requires at least WooCommerce version 3.4.
 
@@ -102,6 +102,14 @@ You can use plugin (f.ex. Polylang) to translate shipping method names.
 4. Setup wizard
 
 == Changelog ==
+
+= 2.3.1 =
+* Fix to help to fill orders from previous versions when using pickup points as shipping method
+
+= 2.3.0 =
+* Many small changes: f.ex. adding new fields to checkout and to sender configuration
+* Fixes compatibility with Klarna
+* Fixes return shipments
 
 = 2.2.2 =
 * Fix compatibility with klarna-checkout-for-woocommerce plugin v2.x
