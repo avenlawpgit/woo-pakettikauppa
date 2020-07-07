@@ -63,12 +63,11 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
       $show_notice_in_screens = array( 'plugins', 'dashboard' );
 
       // Always show the setup notice in plugin settings page
-      $tab = isset($_GET['tab']) ? $_GET['tab'] : false;
-      $section = isset($_GET['section']) ? $_GET['section'] : false;
+      $tab = isset($_GET['tab']) ? filter_input(INPUT_GET, 'tab', FILTER_SANITIZE_SPECIAL_CHARS) : false;
+      $section = isset($_GET['section']) ? filter_input(INPUT_GET, 'section', FILTER_SANITIZE_SPECIAL_CHARS) : false;
       $is_in_wc_settings = $current_screen->id === 'woocommerce_page_wc-settings' && $tab === 'shipping' && $section === str_replace('wc_', '', $this->core->prefix) . '_shipping_method';
 
       if ( in_array($current_screen->id, $show_notice_in_screens, true) ) {
-
         // Determine if this is a new install by checking if the plugin settings
         // have been saved even once. There's a longstanding bug that causes the plugin to save it's options pretty much immediately after activating,
         // as the show_pakettikauppa_shipping_method option is set to `no` by default. There are more than one saved setting if the user has ACTUALLY saved the settings...
@@ -141,6 +140,10 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
       check_ajax_referer(str_replace('wc_', '', $this->core->prefix) . '-meta-box', 'security');
 
       $error_count = count($this->get_errors());
+
+      if ( ! is_numeric($_POST['post_id']) ) {
+        wp_die('', '', 501);
+      }
       $this->save_ajax_metabox($_POST['post_id']);
 
       if ( count($this->get_errors()) !== $error_count ) {
@@ -152,6 +155,9 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
     }
 
     public function save_custom_product_fields( $post_id ) {
+      if ( ! is_numeric($_POST['post_id']) ) {
+        return;
+      }
       $custom_fields = array( str_replace('wc_', '', $this->core->prefix) . '_tariff_codes', str_replace('wc_', '', $this->core->prefix) . '_country_of_origin' );
 
       if ( ! (isset($_POST['woocommerce_meta_nonce']) && wp_verify_nonce(sanitize_key($_POST['woocommerce_meta_nonce']), 'woocommerce_save_data')) ) {
@@ -319,7 +325,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
         return;
       }
 
-      $tracking_codes = $this->create_shipments($_REQUEST['post']);
+      $tracking_codes = $this->create_shipments(sanitizize_key($_REQUEST['post']));
 
       $contents = $this->fetch_shipping_labels($tracking_codes);
 
@@ -557,19 +563,19 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
 
       $return_shipments = get_post_meta($post->ID, '_' . $this->core->prefix . '_return_shipment');
 
-      $additional_service_names = array(
-        '3101' => 'Postiennakko',
-        '3104' => 'Särkyvä',
-        '3163' => 'Henkilökohtaisesti luovutettava',
-        '3165' => 'Säilytysajan pidennys',
-        '3139' => 'Sähköinen saapumisilmoitus',
-        '3174' => 'Suuri',
-        '2106' => 'Noutopiste',
-        '3143' => 'LQ Lähetys',
-        '3102' => 'Monipaketti lähetys',
-        '9902' => 'Asiointikoodi',
-      );
+      $all_shipment_services = $this->shipment->services();
 
+      $all_additional_services = $this->shipment->get_additional_services();
+      $all_shipment_additional_services = array();
+      if ( ! empty($all_additional_services) ) {
+        $all_shipment_additional_services = $all_additional_services[$service_id];
+      }
+
+      if ( ! empty($all_shipment_additional_services) ) {
+        foreach ( $all_shipment_additional_services as $additional_service ) {
+          $additional_service_names[(string) $additional_service->service_code] = $additional_service->name;
+        }
+      }
       ?>
       <div>
         <input type="hidden" name="pakettikauppa_nonce" value="<?php echo wp_create_nonce(str_replace('wc_', '', $this->core->prefix) . '-meta-box'); ?>" id="pakettikauppa_metabox_nonce" />
@@ -628,7 +634,11 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
                   <?php foreach ( $additional_services as $i => $additional_service ) : ?>
                     <?php if ( ! in_array($additional_service, array( '3102' ), true) ) : ?>
                       <li>
-                        <?php echo $additional_service_names[ $additional_service ]; ?>
+                        <?php if ( isset($additional_service_names[ $additional_service ]) ) : ?>
+                          <?php echo $additional_service_names[ $additional_service ]; ?>
+                        <?php else : ?>
+                          <?php echo $additional_service; ?>
+                        <?php endif; ?>
                       </li>
                     <?php endif; ?>
                   <?php endforeach; ?>
@@ -654,7 +664,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
             <fieldset class="pakettikauppa-metabox-fieldset" id="wc_pakettikauppa_custom_shipping_method" style="display: none;">
               <select name="wc_pakettikauppa_service_id" id="pakettikauppa-service" class="pakettikauppa_metabox_values" onchange="pakettikauppa_change_shipping_method();">
                 <option value="__NULL__"><?php esc_html_e('No shipping', 'woo-pakettikauppa'); ?></option>
-                <?php foreach ( $this->shipment->services() as $_service_code => $_service_title ) : ?>
+                <?php foreach ( $all_shipment_services as $_service_code => $_service_title ) : ?>
                   <option
                     <?php if ( strval($_service_code) === $service_id ) : ?>
                           selected="selected"
@@ -665,7 +675,6 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
                 <?php endforeach; ?>
               </select>
 
-              <?php $all_additional_services = $this->shipment->get_additional_services(); ?>
               <?php foreach ( $all_additional_services as $method_code => $_additional_services ) : ?>
                 <ol style="list-style: circle; display: none;" class="pk-admin-additional-services" id="pk-admin-additional-services-<?php echo $method_code; ?>">
                   <?php $show_3102 = false; ?>
@@ -742,7 +751,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
       switch ( $command ) {
         case 'create':
           if ( ! empty($_REQUEST['wc_pakettikauppa_service_id']) ) {
-            $service_id = $_REQUEST['wc_pakettikauppa_service_id'];
+            $service_id = sanitize_key($_REQUEST['wc_pakettikauppa_service_id']);
           }
 
           if ( empty($_REQUEST['custom_method']) ) {
@@ -751,7 +760,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
             $pickup_point_id = $order->get_meta('_' . str_replace('wc_', '', $this->core->prefix) . '_pickup_point_id');
 
             if ( empty($pickup_point_id) && ! empty($_REQUEST['wc_pakettikauppa_pickup_point_id']) ) {
-              $pickup_point_id = $_REQUEST['wc_pakettikauppa_pickup_point_id'];
+              $pickup_point_id = sanitize_key($_REQUEST['wc_pakettikauppa_pickup_point_id']);
 
               update_post_meta($order->get_id(), '_' . str_replace('wc_', '', $this->core->prefix) . '_pickup_point_id', $pickup_point_id);
             }
@@ -779,7 +788,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
             }
 
             if ( ! empty($_REQUEST['wc_pakettikauppa_mps_count']) ) {
-              $additional_services[] = array( '3102' => array( 'count' => $_REQUEST['wc_pakettikauppa_mps_count'] ) );
+              $additional_services[] = array( '3102' => array( 'count' => (int) $_REQUEST['wc_pakettikauppa_mps_count'] ) );
             }
           }
 
@@ -788,7 +797,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
           $this->get_status($order);
           break;
         case 'delete_shipping_label':
-          $tracking_code = $_POST['wc_pakettikauppa'][$command];
+          $tracking_code = esc_attr($_POST['wc_pakettikauppa'][$command]);
 
           $this->delete_shipping_label($order, $tracking_code);
           break;
@@ -930,7 +939,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
         return;
       }
 
-      $tracking_code = $_REQUEST['tracking_code']; // @codingStandardsIgnoreLine
+      $tracking_code = esc_attr($_REQUEST['tracking_code']); // @codingStandardsIgnoreLine
 
       $contents = $this->shipment->fetch_shipping_label($tracking_code);
 

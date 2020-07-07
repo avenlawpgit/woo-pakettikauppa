@@ -291,24 +291,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
 
       $label = base64_decode( $contents->{'response.file'} ); // @codingStandardsIgnoreLine
 
-      $postdata = http_build_query(array( 'label' => $label ));
-
-      $opts = array(
-        'http' => array(
-          'method'  => 'POST',
-          'header'  => 'Content-Type: application/x-www-form-urlencoded',
-          'content' => $postdata,
-        ),
-        'ssl' => array(
-          'verify_peer' => false,
-          'verify_peer_name' => false,
-          'allow_self_signed'=> true,
-        ),
-      );
-
-      $context  = stream_context_create($opts);
-
-      $result = file_get_contents($url, false, $context);
+      $result = wp_remote_post($url, array( 'label' => $label ));
 
       if ( $result === false ) {
         return false;
@@ -520,6 +503,11 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
      */
     public function create_shipment_from_order( $order, $service_id = null, $additional_services = array() ) {
       $shipment   = new PK_Shipment();
+      $language = determine_locale();
+
+      if ( ! empty($language) ) {
+        $language = substr($language, 0, 2);
+      }
 
       $shipment->setShippingMethod($service_id);
 
@@ -633,7 +621,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
       }
 
       try {
-        $this->client->createTrackingCode($shipment);
+        $this->client->createTrackingCode($shipment, $language);
       } catch ( \Exception $e ) {
         /* translators: %s: Error message */
         throw new \Exception(wp_sprintf(__('WooCommerce Pakettikauppa: tracking code creation failed: %s', 'woo-pakettikauppa'), $e->getMessage()));
@@ -852,7 +840,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipment') ) {
      *
      * @return array Available shipping services
      */
-    public function services( $admin_page = false ) {
+    public function services() {
       $services = array();
 
       $all_shipping_methods = $this->get_shipping_methods();
