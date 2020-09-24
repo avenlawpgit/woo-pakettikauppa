@@ -37,7 +37,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
     public function load() {
       add_action('current_screen', array( $this, 'maybe_show_notices' ));
       add_filter('plugin_action_links_' . $this->core->basename, array( $this, 'add_settings_link' ));
-      add_filter('plugin_row_meta', array( $this, 'plugin_row_meta' ), 10, 2);
+      add_filter('plugin_row_meta', array( $this, 'plugin_row_meta_wrapper' ), 10, 2);
       add_filter('bulk_actions-edit-shop_order', array( $this, 'register_multi_create_orders' ));
       add_action('woocommerce_admin_order_actions_end', array( $this, 'register_quick_create_order' ), 10, 2); //to add print option at the end of each orders in orders page
       add_action('admin_enqueue_scripts', array( $this, 'admin_enqueue_scripts' ));
@@ -144,18 +144,18 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
       if ( ! is_numeric($_POST['post_id']) ) {
         wp_die('', '', 501);
       }
-      $this->save_ajax_metabox($_POST['post_id']);
+      $this->save_ajax_metabox((int) $_POST['post_id']);
 
       if ( count($this->get_errors()) !== $error_count ) {
         wp_die('', '', 501);
       }
 
-      $this->meta_box(get_post($_POST['post_id']));
+      $this->meta_box(get_post((int) $_POST['post_id']));
       wp_die();
     }
 
     public function save_custom_product_fields( $post_id ) {
-      if ( ! is_numeric($_POST['post_id']) ) {
+      if ( ! is_numeric($post_id) ) {
         return;
       }
       $custom_fields = array( str_replace('wc_', '', $this->core->prefix) . '_tariff_codes', str_replace('wc_', '', $this->core->prefix) . '_country_of_origin' );
@@ -165,9 +165,9 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
       }
 
       foreach ( $custom_fields as $custom_field ) {
-        $value = $_POST[ $custom_field ];
+        $value = sanitize_text_field($_POST[ $custom_field ]);
         if ( ! empty($value) ) {
-          update_post_meta($post_id, $custom_field, strtoupper(esc_attr($value)));
+          update_post_meta($post_id, $custom_field, strtoupper($value));
         } else {
           delete_post_meta($post_id, $custom_field);
         }
@@ -308,9 +308,9 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
       $action = null;
 
       if ( isset($_REQUEST['action']) && $_REQUEST['action'] !== '-1' ) {
-        $action = $_REQUEST['action'];
+        $action = sanitize_key($_REQUEST['action']);
       } elseif ( isset($_REQUEST['action2']) && $_REQUEST['action2'] !== '-1' ) {
-        $action = $_REQUEST['action2'];
+        $action = sanitize_key($_REQUEST['action2']);
       }
 
       if ( $action === null ) {
@@ -325,7 +325,13 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
         return;
       }
 
-      $tracking_codes = $this->create_shipments(sanitizize_key($_REQUEST['post']));
+      $order_ids = array();
+
+      // instead of array_map we use foreach because array_map is not allowed by sniff rules
+      foreach ( $_REQUEST['post'] as $order_id ) {
+          $order_ids[] = sanitize_text_field($order_id);
+      }
+      $tracking_codes = $this->create_shipments($order_ids);
 
       $contents = $this->fetch_shipping_labels($tracking_codes);
 
@@ -432,6 +438,10 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
         $print_error = wp_sprintf(__('An error occurred: %s', 'woo-pakettikauppa'), $message);
         printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), esc_html($print_error));
       }
+    }
+
+    public function plugin_row_meta_wrapper( $links, $file ) {
+      return $this->core->admin->plugin_row_meta($links, $file);
     }
 
     /**
@@ -744,7 +754,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
 
       $order = new \WC_Order($post_id);
 
-      $command = key($_POST['wc_pakettikauppa']);
+      $command = sanitize_key(key($_POST['wc_pakettikauppa']));
 
       $service_id = null;
 
@@ -769,8 +779,9 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
 
             if ( ! empty($_REQUEST['additional_services']) ) {
               foreach ( $_REQUEST['additional_services'] as $_additional_service_code ) {
-                if ( $_additional_service_code !== '3101' ) {
-                  $additional_services[] = array( $_additional_service_code => null );
+                $_additional_service_code = intval($_additional_service_code);
+                if ( $_additional_service_code !== 3101 ) {
+                  $additional_services[] = array( (string) $_additional_service_code => null );
                 } else {
                   $settings = $this->shipment->get_settings();
 
@@ -788,7 +799,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
             }
 
             if ( ! empty($_REQUEST['wc_pakettikauppa_mps_count']) ) {
-              $additional_services[] = array( '3102' => array( 'count' => (int) $_REQUEST['wc_pakettikauppa_mps_count'] ) );
+              $additional_services[] = array( '3102' => array( 'count' => (string) intval($_REQUEST['wc_pakettikauppa_mps_count']) ) );
             }
           }
 
@@ -797,7 +808,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
           $this->get_status($order);
           break;
         case 'delete_shipping_label':
-          $tracking_code = esc_attr($_POST['wc_pakettikauppa'][$command]);
+          $tracking_code = sanitize_text_field($_POST['wc_pakettikauppa'][$command]);
 
           $this->delete_shipping_label($order, $tracking_code);
           break;
@@ -939,7 +950,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Admin') ) {
         return;
       }
 
-      $tracking_code = esc_attr($_REQUEST['tracking_code']); // @codingStandardsIgnoreLine
+      $tracking_code = sanitize_text_field($_REQUEST['tracking_code']); // @codingStandardsIgnoreLine
 
       $contents = $this->shipment->fetch_shipping_label($tracking_code);
 
