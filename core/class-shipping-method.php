@@ -629,7 +629,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
 
       $taxes_total = 0;
       $cart_obj    = WC()->cart;
-      $cart_total = $cart_obj->get_cart_contents_total();
+      $cart_total = (float) $cart_obj->get_cart_contents_total();
 
       $cart = $cart_obj->get_cart();
 
@@ -638,7 +638,7 @@ if ( ! class_exists(__NAMESPACE__ . '\Shipping_Method') ) {
 
         // Prevent division by zero when the cart total is zero
         $cost_item = 0;
-        if ( $cart_total !== 0 ) {
+        if ( $cart_total <> 0 ) {
           $cost_item = $shipping_cost * $item['line_total'] / $cart_total;
         }
 
